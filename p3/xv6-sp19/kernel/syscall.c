@@ -17,7 +17,9 @@
 int
 fetchint(struct proc *p, uint addr, int *ip)
 {
-  if(addr >= p->sz || addr+4 > p->sz || addr < MAPPED)
+  if((addr >= p->sz && addr < p->ustack)
+    || (addr+4 > p->sz && addr < p->ustack)
+    || addr < MAPPED)
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -30,13 +32,20 @@ int
 fetchstr(struct proc *p, uint addr, char **pp)
 {
   char *s, *ep;
-  if(addr >= p->sz || addr < MAPPED)
+  if((addr >= p->sz && addr < p->ustack) || addr < MAPPED)
     return -1;
   *pp = (char*)addr;
   ep = (char*)p->sz;
-  for(s = *pp; s < ep; s++)
-    if(*s == 0)
-      return s - *pp;
+  if (addr < p->sz && addr >= MAPPED) {
+    for(s = *pp; s < ep; s++)
+      if(*s == 0)
+        return s - *pp;
+  } else if (addr >= p->ustack && addr < USERTOP - 1) {
+    for(s = *pp; s < (char*)USERTOP; s++)
+      if(*s == 0)
+        return s - *pp;
+  }
+
   return -1;
 }
 
@@ -57,7 +66,10 @@ argptr(int n, char **pp, int size)
 
   if(argint(n, &i) < 0)
     return -1;
-  if((uint)i >= proc->sz || (uint)i+size > proc->sz || (uint)i < MAPPED)
+  if(((uint)i >= proc->sz && (uint)i < proc->ustack)
+        || ((uint)i+size > proc->sz && (uint)i < proc->ustack)
+        || ((uint)i+size>USERTOP)
+        || (uint)i < MAPPED)
     return -1;
   *pp = (char*)i;
   return 0;
@@ -73,6 +85,11 @@ argstr(int n, char **pp)
   int addr;
   if(argint(n, &addr) < 0)
     return -1;
+  if(((uint)addr >= proc->sz && (uint)addr < proc->ustack) ||
+     ((uint)addr+4 > proc->sz && (uint)addr < proc->ustack) ||
+     (uint)addr > USERTOP){
+    return -1;
+  }
   return fetchstr(proc, addr, pp);
 }
 

@@ -1,4 +1,0 @@
-#!/bin/bash
-base=/u/c/s/cs537-1/tests/p3b
-python $base/project3b.py --test-path $base $@ | tee -i runtests.log
-exit $?

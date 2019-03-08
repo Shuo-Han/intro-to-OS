@@ -308,12 +308,12 @@ pde_t*
 copyuvm(pde_t *pgdir, uint sz)
 {
   pde_t *d;
-  pte_t *pte;
-  uint pa, i;
-  char *mem;
-
+  pte_t *pte, *pte_s;
+  uint pa, pa_s, i, j;
+  char *mem, *mem_s;
   if((d = setupkvm()) == 0)
     return 0;
+
   for(i = MAPPED; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void*)i, 0)) == 0)
       panic("copyuvm: pte should exist");
@@ -324,6 +324,19 @@ copyuvm(pde_t *pgdir, uint sz)
       goto bad;
     memmove(mem, (char*)pa, PGSIZE);
     if(mappages(d, (void*)i, PGSIZE, PADDR(mem), PTE_W|PTE_U) < 0)
+      goto bad;
+  }
+
+  for(j = proc->ustack; j < USERTOP; j += PGSIZE){
+    if((pte_s = walkpgdir(pgdir, (void*)j, 0)) == 0)
+      panic("copyuvm: pte(stack) should exist");
+    if(!(*pte_s & PTE_P))
+      panic("copyuvm: page()stack not present");
+    pa_s = PTE_ADDR(*pte_s);
+    if((mem_s = kalloc()) == 0)
+      goto bad;
+    memmove(mem_s, (char*)pa_s, PGSIZE);
+    if(mappages(d, (void*)j, PGSIZE, PADDR(mem_s), PTE_W|PTE_U) < 0)
       goto bad;
   }
   return d;

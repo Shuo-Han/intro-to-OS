@@ -76,6 +76,13 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
 
+  case 14:
+    if(proc->ustack - rcr2() <= PGSIZE && proc->ustack - rcr2() > 0)
+      if(growustack())
+        break;
+    proc->killed = 1;
+    break;
+
   default:
     if(proc == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.

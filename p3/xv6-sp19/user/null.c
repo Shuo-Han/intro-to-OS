@@ -5,9 +5,9 @@
 int
 main(int argc, char *argv[])
 {
-  int *i = 0;
+  char i[4097];
 
-  i[0] = 1;
+  printf(1, "%d\n", i);
   // printf(1, "The value of i is : %d", *i);
 
   exit();

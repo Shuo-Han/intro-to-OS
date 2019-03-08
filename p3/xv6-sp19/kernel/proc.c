@@ -135,7 +135,8 @@ fork(void)
   if((np = allocproc()) == 0)
     return -1;
 
-  // Copy process state from p.
+  // Copy process state from p. ustack must be page-aligned
+  // cprintf("proc->pid is %d, proc->ustack: %p\n", proc->pid,proc->ustack);
   if((np->pgdir = copyuvm(proc->pgdir, proc->sz)) == 0){
     kfree(np->kstack);
     np->kstack = 0;
@@ -143,6 +144,7 @@ fork(void)
     return -1;
   }
   np->sz = proc->sz;
+  np->ustack = proc->ustack;
   np->parent = proc;
   *np->tf = *proc->tf;
 
@@ -442,4 +444,13 @@ procdump(void)
     }
     cprintf("\n");
   }
+}
+
+int
+growustack(void) {
+  int new_sz = 0;
+  if (proc->ustack >= proc->sz+6*PGSIZE && proc->ustack <= USERTOP-PGSIZE)
+    if((new_sz = allocuvm(proc->pgdir,proc->ustack-PGSIZE,proc->ustack)) != 0)
+      proc->ustack -= PGSIZE;
+  return new_sz;
 }
