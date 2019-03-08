@@ -1,8 +1,0 @@
-include/fcntl.h
-include/stat.h
-
-kernel/fs.c
-kernel/sysfile.c
-
-Makefile
-user/makefile.mk
