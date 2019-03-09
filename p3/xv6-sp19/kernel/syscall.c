@@ -19,7 +19,9 @@ fetchint(struct proc *p, uint addr, int *ip)
 {
   if((addr >= p->sz && addr < p->ustack)
     || (addr+4 > p->sz && addr < p->ustack)
-    || addr < MAPPED)
+    || (addr >= p->sharedup && addr < MAPPED)
+    || (addr+4 > p->sharedup && addr < MAPPED)
+    || addr < PGSIZE)
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -32,11 +34,17 @@ int
 fetchstr(struct proc *p, uint addr, char **pp)
 {
   char *s, *ep;
-  if((addr >= p->sz && addr < p->ustack) || addr < MAPPED)
+  if((addr >= p->sz && addr < p->ustack) ||
+     (addr >= p->sharedup && addr < MAPPED) ||
+     addr < PGSIZE)
     return -1;
   *pp = (char*)addr;
   ep = (char*)p->sz;
-  if (addr < p->sz && addr >= MAPPED) {
+  if (addr < p->sharedup && addr >= PGSIZE) {
+    for(s = *pp; s < (char*)(p->sharedup); s++)
+      if(*s == 0)
+        return s - *pp;
+  } else if (addr < p->sz && addr >= MAPPED) {
     for(s = *pp; s < ep; s++)
       if(*s == 0)
         return s - *pp;
@@ -66,10 +74,12 @@ argptr(int n, char **pp, int size)
 
   if(argint(n, &i) < 0)
     return -1;
-  if(((uint)i >= proc->sz && (uint)i < proc->ustack)
-        || ((uint)i+size > proc->sz && (uint)i < proc->ustack)
-        || ((uint)i+size>USERTOP)
-        || (uint)i < MAPPED)
+  if(((uint)i >= proc->sz && (uint)i < proc->ustack) ||
+     ((uint)i+size > proc->sz && (uint)i < proc->ustack) ||
+     ((uint)i+size>USERTOP) ||
+     ((uint)i >= proc->sharedup && (uint)i < MAPPED) ||
+     ((uint)i+size > proc->sharedup && (uint)i < MAPPED) ||
+      (uint)i < PGSIZE)
     return -1;
   *pp = (char*)i;
   return 0;
@@ -87,7 +97,10 @@ argstr(int n, char **pp)
     return -1;
   if(((uint)addr >= proc->sz && (uint)addr < proc->ustack) ||
      ((uint)addr+4 > proc->sz && (uint)addr < proc->ustack) ||
-     (uint)addr > USERTOP){
+     (uint)addr > USERTOP ||
+     ((uint)addr >= proc->sharedup && (uint)addr < MAPPED) ||
+     ((uint)addr+4 > proc->sharedup && (uint)addr < MAPPED) ||
+      (uint)addr < PGSIZE){
     return -1;
   }
   return fetchstr(proc, addr, pp);
@@ -119,6 +132,7 @@ static int (*syscalls[])(void) = {
 [SYS_wait]    sys_wait,
 [SYS_write]   sys_write,
 [SYS_uptime]  sys_uptime,
+[SYS_shmget]  sys_shmget,
 };
 
 // Called on a syscall trap. Checks that the syscall number (passed via eax)

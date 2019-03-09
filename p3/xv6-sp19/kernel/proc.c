@@ -5,6 +5,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+// #include "vm.c"
 
 struct {
   struct spinlock lock;
@@ -14,6 +15,7 @@ struct {
 static struct proc *initproc;
 
 int nextpid = 1;
+char *shmem[3];
 extern void forkret(void);
 extern void trapret(void);
 
@@ -77,6 +79,11 @@ userinit(void)
 {
   struct proc *p;
   extern char _binary_initcode_start[], _binary_initcode_size[];
+
+  for(int i = 0; i < 3; i++) {
+    if((shmem[i] = kalloc()) == 0)
+      panic("Shared memory allocation failed!");
+  }
 
   p = allocproc();
   acquire(&ptable.lock);
@@ -145,6 +152,7 @@ fork(void)
   }
   np->sz = proc->sz;
   np->ustack = proc->ustack;
+  np->sharedup = proc->sharedup;
   np->parent = proc;
   *np->tf = *proc->tf;
 
@@ -453,4 +461,82 @@ growustack(void) {
     if((new_sz = allocuvm(proc->pgdir,proc->ustack-PGSIZE,proc->ustack)) != 0)
       proc->ustack -= PGSIZE;
   return new_sz;
+}
+
+pte_t *
+getpa(pde_t *pgdir, const void *va, int create)
+{
+  pde_t *pde;
+  pte_t *pgtab;
+
+  pde = &pgdir[PDX(va)];
+  if(*pde & PTE_P){
+    pgtab = (pte_t*)PTE_ADDR(*pde);
+  } else {
+    if(!create || (pgtab = (pte_t*)kalloc()) == 0)
+      return 0;
+    // Make sure all those PTE_P bits are zero.
+    memset(pgtab, 0, PGSIZE);
+    // The permissions here are overly generous, but they can
+    // be further restricted by the permissions in the page table
+    // entries, if necessary.
+    *pde = PADDR(pgtab) | PTE_P | PTE_W | PTE_U;
+  }
+  return &pgtab[PTX(va)];
+}
+
+// Create PTEs for linear addresses starting at la that refer to
+// physical addresses starting at pa. la and size might not
+// be page-aligned.
+int
+mappages(pde_t *pgdir, void *la, uint size, uint pa, int perm)
+{
+  char *a, *last;
+  pte_t *pte;
+
+  a = PGROUNDDOWN(la);
+  last = PGROUNDDOWN(la + size - 1);
+  for(;;){
+    pte = getpa(pgdir, a, 1);
+    if(pte == 0)
+      return -1;
+    if(*pte & PTE_P)
+      panic("remap");
+    *pte = pa | perm | PTE_P;
+    if(a == last)
+      break;
+    a += PGSIZE;
+    pa += PGSIZE;
+  }
+  return 0;
+}
+
+uint
+shmget(int n) {
+  if (n < 0 || n > 2)
+    return NULL;
+  uint addr, new;
+  // cprintf("%s\n", (char *)*getpa(proc->pgdir, (char *)n));
+  for(int i = 1; i < 4; i++) {
+    addr = *getpa(proc->pgdir, (char *)(i*PGSIZE), 0);
+    // addr = *getpa(proc->pgdir, (char *)(0x3000), 0);
+    // cprintf("%p\n", addr);
+    if(PTE_ADDR(addr) == (uint)shmem[n])
+      return i*PGSIZE;
+    else if(addr == 0) {
+      if(mappages(proc->pgdir, (char *)(i*PGSIZE), PGSIZE, PADDR(shmem[n]), PTE_W|PTE_U) < 0)
+        panic("shmget map failed!");
+      else {
+        proc->sharedup = (i+1)*PGSIZE;
+        new = *getpa(proc->pgdir, (char *)(i*PGSIZE), 0);
+        if ((int)shmem[n] == PTE_ADDR(new)) {
+          return i*PGSIZE;
+        } else {
+          panic("pa mismatch after mapping!");
+        }
+      }
+    }
+  }
+  panic("Invalid location!");
+  return NULL;
 }

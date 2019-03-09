@@ -25,6 +25,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+char* shmget(int);
 
 // user library functions (ulib.c)
 int stat(char*, struct stat*);
@@ -41,4 +42,3 @@ void free(void*);
 int atoi(const char*);
 
 #endif // _USER_H_
-

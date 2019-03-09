@@ -110,6 +110,7 @@ int             wait(void);
 void            wakeup(void*);
 void            yield(void);
 int             growustack(void);
+uint            shmget(int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

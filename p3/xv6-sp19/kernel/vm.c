@@ -79,14 +79,6 @@ mappages(pde_t *pgdir, void *la, uint size, uint pa, int perm)
 {
   char *a, *last;
   pte_t *pte;
-  // int* bar;
-  // bar = (int*) la;
-  // if ((int)bar == 1048576) {
-  //   cprintf("!!!!!!!!!!!!\n");
-  //   cprintf("!!!!!!!!!!!!\n");
-  //   cprintf("!!!!!!!!!!!!\n");
-  // }
-  // cprintf("!!!!!!!!!!!!:  %p\n", (int*) la);
 
   a = PGROUNDDOWN(la);
   last = PGROUNDDOWN(la + size - 1);
@@ -294,7 +286,7 @@ freevm(pde_t *pgdir)
 
   if(pgdir == 0)
     panic("freevm: no pgdir");
-  deallocuvm(pgdir, USERTOP, 0);
+  deallocuvm(pgdir, USERTOP, MAPPED);
   for(i = 0; i < NPDENTRIES; i++){
     if(pgdir[i] & PTE_P)
       kfree((char*)PTE_ADDR(pgdir[i]));
@@ -309,10 +301,19 @@ copyuvm(pde_t *pgdir, uint sz)
 {
   pde_t *d;
   pte_t *pte, *pte_s;
-  uint pa, pa_s, i, j;
+  uint pa, pa_s, i, j, k, addr;
   char *mem, *mem_s;
   if((d = setupkvm()) == 0)
     return 0;
+
+  for(k = 1; k < 4; k++) {
+    addr = *walkpgdir(pgdir, (char *)(k*PGSIZE), 0);
+    if(addr != 0) {
+      if(mappages(d, (char *)(k*PGSIZE), PGSIZE, PADDR(PTE_ADDR(addr)), PTE_W|PTE_U) < 0)
+        panic("fork: copy shared mem failed!");
+    }
+  }
+
 
   for(i = MAPPED; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void*)i, 0)) == 0)
